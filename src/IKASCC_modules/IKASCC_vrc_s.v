@@ -44,6 +44,14 @@ wire            rst_n = i_RST_n;
 
 assign  o_ROMCS_n = i_CS_n | i_RD_n;
 
+//synchronizer
+reg     [7:0]   db_z;
+reg     [4:0]   abhi_z;
+always @(posedge emuclk) if(!mclkpcen_n) begin
+    db_z   <= i_DB;
+    abhi_z <= i_ABHI;
+end
+
 reg     [5:0]   bankreg0, bankreg1, bankreg2, bankreg3;
 always @(posedge emuclk) begin
     if(!rst_n) begin
@@ -53,12 +61,12 @@ always @(posedge emuclk) begin
         bankreg3 <= 6'h03;
     end
     else begin if(!mclkpcen_n) begin
-        if(i_WRRQ && i_ABHI[1:0] == 2'b10) begin
-            case(i_ABHI[4:2])
-                3'b010: bankreg0 <= i_DB[5:0]; //BR0, 0x5000-0x57FF
-                3'b011: bankreg1 <= i_DB[5:0]; //BR1, 0x7000-0x77FF
-                3'b100: bankreg2 <= i_DB[5:0]; //BR2, 0x9000-0x97FF
-                3'b101: bankreg3 <= i_DB[5:0]; //BR3, 0xB000-0xB7FF
+        if(i_WRRQ && abhi_z[1:0] == 2'b10) begin
+            case(abhi_z[4:2])
+                3'b010: bankreg0 <= db_z[5:0]; //BR0, 0x5000-0x57FF
+                3'b011: bankreg1 <= db_z[5:0]; //BR1, 0x7000-0x77FF
+                3'b100: bankreg2 <= db_z[5:0]; //BR2, 0x9000-0x97FF
+                3'b101: bankreg3 <= db_z[5:0]; //BR3, 0xB000-0xB7FF
                 default: ;
             endcase
         end

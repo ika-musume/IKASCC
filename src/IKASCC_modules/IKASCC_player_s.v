@@ -34,12 +34,14 @@ wire            rst_n = i_RST_n;
 //////  Test register
 ////
 
+reg     [7:0]   db_z;
 wire            test_wr = i_WRRQ & i_SCCREG_EN & (i_ABLO[7:5] == 3'b111);
 reg     [7:0]   test;
 always @(posedge emuclk) begin
     if(!rst_n) test <= 8'h00;
     else begin if(!mclkpcen_n) begin
-        if(test_wr) test <= i_DB;
+        db_z <= i_DB;
+        if(test_wr) test <= db_z;
     end end
 end
 
@@ -475,8 +477,8 @@ wire    freq_lo_wr = i_WRRQ & i_SCCREG_EN & (i_ABLO[7:5] == ADDR_FREQ_BASE[7:5])
 wire    freq_hi_wr = i_WRRQ & i_SCCREG_EN & (i_ABLO[7:5] == ADDR_FREQ_BASE[7:5]) & (i_ABLO[3:0] == (ADDR_FREQ_BASE[3:0] + 4'h1));
 reg     [11:0]  freq;
 always @(posedge emuclk) if(!mclkpcen_n) begin
-    if(freq_lo_wr) freq[7:0] <= i_DB;
-    if(freq_hi_wr) freq[11:8] <= i_DB[3:0];
+    if(freq_lo_wr) freq[7:0] <= i_DB_Z;
+    if(freq_hi_wr) freq[11:8] <= i_DB_Z[3:0];
 end
 
 
@@ -500,7 +502,7 @@ wire            fraccntr_a_bo;
 IKASCC_primitive_dncntr #(.W(4)) u_fraccntr_a (
     .i_EMUCLK(emuclk), .i_MCLK_PCEN_n(mclkpcen_n),
     .i_SET(1'b0 | ~rst_n), .i_LD(fraccntr_ld), .i_CNT(1'b1),
-    .i_D(freq_lo_wr ? i_DB[3:0] : freq[3:0]), .o_Q(fraccntr_a), .o_BO(fraccntr_a_bo)
+    .i_D(freq_lo_wr ? i_DB_Z[3:0] : freq[3:0]), .o_Q(fraccntr_a), .o_BO(fraccntr_a_bo)
 );
 
 wire    [3:0]   fraccntr_b;
@@ -508,7 +510,7 @@ wire            fraccntr_b_bo;
 IKASCC_primitive_dncntr #(.W(4)) u_fraccntr_b (
     .i_EMUCLK(emuclk), .i_MCLK_PCEN_n(mclkpcen_n),
     .i_SET(1'b0 | ~rst_n), .i_LD(fraccntr_ld), .i_CNT(fraccntr_a_bo),
-    .i_D(freq_lo_wr ? i_DB[7:4] : freq[7:4]), .o_Q(fraccntr_b), .o_BO(fraccntr_b_bo)
+    .i_D(freq_lo_wr ? i_DB_Z[7:4] : freq[7:4]), .o_Q(fraccntr_b), .o_BO(fraccntr_b_bo)
 );
 
 wire            fraccntr_c_cnt = i_TEST[0] ? 1'b1 : fraccntr_a_bo & fraccntr_b_bo;
@@ -517,7 +519,7 @@ wire            fraccntr_c_bo;
 IKASCC_primitive_dncntr #(.W(4)) u_fraccntr_c (
     .i_EMUCLK(emuclk), .i_MCLK_PCEN_n(mclkpcen_n),
     .i_SET(1'b0 | ~rst_n), .i_LD(fraccntr_ld), .i_CNT(fraccntr_c_cnt),
-    .i_D(freq_hi_wr ? i_DB[3:0] : freq[11:8]), .o_Q(fraccntr_c), .o_BO(fraccntr_c_bo)
+    .i_D(freq_hi_wr ? i_DB_Z[3:0] : freq[11:8]), .o_Q(fraccntr_c), .o_BO(fraccntr_c_bo)
 );
 
 assign  intcntr_cnt = i_TEST[1] ? fraccntr_a_bo & fraccntr_b_bo : fraccntr_c_cnt & fraccntr_c_bo;
@@ -559,7 +561,7 @@ reg             mute;
 always @(posedge emuclk) begin
     if(!i_RST_n) mute <= 1'b0;
     else begin if(!mclkpcen_n) begin
-        if(mute_wr) mute <= i_DB[BIT_MUTE];
+        if(mute_wr) mute <= i_DB_Z[BIT_MUTE];
     end end
 end
 
@@ -577,7 +579,7 @@ wire            mul_rst_pcen = intcntr_cnt | freq_lo_wr | freq_hi_wr; //positive
 wire    vol_wr = i_WRRQ & i_SCCREG_EN & (i_ABLO[7:5] == ADDR_VOL[7:5]) & (i_ABLO[3:0] ==  ADDR_VOL[3:0]);
 reg     [3:0]  vol;
 always @(posedge emuclk) if(!mclkpcen_n) begin
-    if(vol_wr) vol <= i_DB[3:0];
+    if(vol_wr) vol <= i_DB_Z[3:0];
 end
 
 //current volume register
@@ -655,7 +657,7 @@ always @(posedge emuclk) if(!mclkpcen_n) begin
     end
 
     //asynchronous outlatch/mute emulation
-    if(mute_wr && ~i_DB[BIT_MUTE]) final_sound <= 8'h00;
+    if(mute_wr && ~i_DB_Z[BIT_MUTE]) final_sound <= 8'h00;
     else if(!mute) final_sound <= 8'h0;
     else begin
         if(accshft_en_z && (~cyccntr == 4'd8)) final_sound <= accshft_next;

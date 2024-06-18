@@ -90,9 +90,6 @@ if(FULLY_ASYNC == 0) begin : IKASCC_SYNC_MODE
 
 //declare synchronized signals: every module must use these things!
 wire            read_request, write_request;
-reg     [7:0]   db_z;
-reg     [7:0]   ablo_z;
-reg     [4:0]   abhi_z;
 
 reg     [1:0]   rd_syncchain, wr_syncchain;
 always @(posedge emuclk) if(!mclkpcen_n) begin
@@ -106,13 +103,6 @@ end
 //edge detector
 assign  read_request  = rd_syncchain == 2'b10 || rd_syncchain == 2'b00;
 assign  write_request = wr_syncchain == 2'b10;
-
-//synchronizer
-always @(posedge emuclk) if(!mclkpcen_n) begin
-    db_z   <= i_DB;
-    ablo_z <= i_ABLO;
-    abhi_z <= i_ABHI;
-end
 
 
 
