@@ -1,4 +1,4 @@
-module IKASCC #(parameter FULLY_ASYNC = 0, parameter RAM_TYPE = 1, parameter FAST_CLOCK = 0) (
+module IKASCC #(parameter IMPL_TYPE = 0, parameter RAM_BLOCK = 1) (
     //chip clock
     input   wire            i_EMUCLK, //emulator master clock
 
@@ -20,7 +20,7 @@ module IKASCC #(parameter FULLY_ASYNC = 0, parameter RAM_TYPE = 1, parameter FAS
     output  wire    [7:0]   o_DB,
 
     //output driver enable
-    output  wire            o_D_OE,
+    output  wire            o_DB_OE,
 
     //SCC mapper output
     output  wire            o_ROMCS_n,
@@ -33,8 +33,31 @@ module IKASCC #(parameter FULLY_ASYNC = 0, parameter RAM_TYPE = 1, parameter FAS
     output  wire            o_TEST
 );
 
-parameter   RAMCTRL_ASYNC = 0;
+
+
+///////////////////////////////////////////////////////////
+//////  Clock and reset
+////
+
+/*
+    IMPLEMENTATION TYPE
+    0: (sync)SoC implementation with fast clock above 10MHz
+    1: (sync)SoC implementation/standalone module with slow clock around 3.58MHz
+    2: (async)standalone module with slow clock around 3.58MHz
+*/
+
+localparam  RAMCTRL_ASYNC = 1; //TBD
 localparam  RAM_ASYNC_WRITE_DELAY_CHAIN_LENGTH = 20;
+localparam  FULLY_ASYNC = (IMPL_TYPE == 2) ? 1 : 0;
+localparam  RAM_TYPE    = (IMPL_TYPE == 2) ? 0 : RAM_BLOCK;
+localparam  FAST_CLOCK  = (IMPL_TYPE == 0) ? 1 : 0;
+
+`define IKASCC_SIMULATION
+//`define IKASCC_ASYNC_VENDOR_ALTERA
+//`define IKASCC_ASYNC_VENDOR_XILINX
+//`define IKASCC_ASYNC_VENDOR_LATTICE
+//`define IKASCC_ASYNC_VENDOR_GOWIN
+
 
 
 ///////////////////////////////////////////////////////////
@@ -206,6 +229,6 @@ end
 endgenerate
 
 //data output enable
-assign  o_D_OE = (sccreg_en & ~i_CS_n & ~i_RD_n & ~i_ABLO[7]);
+assign  o_DB_OE = (sccreg_en & ~i_CS_n & ~i_RD_n & ~i_ABLO[7]);
 
 endmodule

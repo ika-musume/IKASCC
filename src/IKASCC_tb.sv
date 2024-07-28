@@ -97,7 +97,7 @@ initial begin
 end
 
 
-IKASCC #(.FULLY_ASYNC(0), .RAM_TYPE(1), .FAST_CLOCK(0)) u_dut (
+IKASCC #(.IMPL_TYPE(1), .RAM_BLOCK(1)) u_dut (
     .i_EMUCLK                   (CLK                        ),
     .i_MCLK_PCEN_n              (~EMUCLK_PCEN               ),
     .i_RST_n                    (RST_n                      ),
@@ -121,7 +121,7 @@ IKASCC #(.FULLY_ASYNC(0), .RAM_TYPE(1), .FAST_CLOCK(0)) u_dut (
 );
 
 
-IKASCC #(.FULLY_ASYNC(1), .RAM_TYPE(1), .FAST_CLOCK(0)) u_dut_async (
+IKASCC #(.IMPL_TYPE(3), .RAM_BLOCK(0)) u_dut_async (
     .i_EMUCLK                   (EMUCLK                     ),
     .i_MCLK_PCEN_n              (1'b0                       ),
     .i_RST_n                    (RST_n                      ),

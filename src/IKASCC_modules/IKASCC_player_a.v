@@ -118,7 +118,7 @@ wire    [4:0]   ch1_ram_addr_cntr, ch1_ram_addr_cpu;
 wire    [4:0]   ch1_ram_addr = ch1_ram_cs ? ch1_ram_addr_cpu : ch1_ram_addr_cntr;
 wire    [7:0]   ch1_ram_d, ch1_ram_q;
 
-IKASCC_player_memory_a #(.INITFILE("D:/ASIC_RE/complete/Konami_051649/HDL/ch1ram.txt")) u_mem_ch1 (
+IKASCC_player_memory_a #(.INITFILE()) u_mem_ch1 (
     .i_RAM_CS                   (ch1_ram_cs & ~test[6]      ),
     .i_RAM_WR                   (i_DELAYED_WR               ),
     .i_RAM_ADDR                 (ch1_ram_addr               ),
@@ -165,7 +165,7 @@ wire    [4:0]   ch2_ram_addr_cntr, ch2_ram_addr_cpu;
 wire    [4:0]   ch2_ram_addr = ch2_ram_cs ? ch2_ram_addr_cpu : ch2_ram_addr_cntr;
 wire    [7:0]   ch2_ram_d, ch2_ram_q;
 
-IKASCC_player_memory_a #(.INITFILE("D:/ASIC_RE/complete/Konami_051649/HDL/ch2ram.txt")) u_mem_ch2 (
+IKASCC_player_memory_a #(.INITFILE()) u_mem_ch2 (
     .i_RAM_CS                   (ch2_ram_cs & ~test[6]      ),
     .i_RAM_WR                   (i_DELAYED_WR               ),
     .i_RAM_ADDR                 (ch2_ram_addr               ),
@@ -212,7 +212,7 @@ wire    [4:0]   ch3_ram_addr_cntr, ch3_ram_addr_cpu;
 wire    [4:0]   ch3_ram_addr = ch3_ram_cs ? ch3_ram_addr_cpu : ch3_ram_addr_cntr;
 wire    [7:0]   ch3_ram_d, ch3_ram_q;
 
-IKASCC_player_memory_a #(.INITFILE("D:/ASIC_RE/complete/Konami_051649/HDL/ch3ram.txt")) u_mem_ch3 (
+IKASCC_player_memory_a #(.INITFILE()) u_mem_ch3 (
     .i_RAM_CS                   (ch3_ram_cs & ~test[6]      ),
     .i_RAM_WR                   (i_DELAYED_WR               ),
     .i_RAM_ADDR                 (ch3_ram_addr               ),
@@ -298,7 +298,7 @@ always @(posedge emuclk) begin
     if(ch5_wavelatch_tick_pcen) ch5_wavelatch <= ch45_ram_q;
 end
 
-IKASCC_player_memory_a #(.INITFILE("D:/ASIC_RE/complete/Konami_051649/HDL/ch45ram.txt")) u_mem_ch45 (
+IKASCC_player_memory_a #(.INITFILE()) u_mem_ch45 (
     .i_RAM_CS                   (ch45_ram_cs & ~test[6] & ~test[7]),
     .i_RAM_WR                   (i_DELAYED_WR               ),
     .i_RAM_ADDR                 (ch45_ram_addr              ),

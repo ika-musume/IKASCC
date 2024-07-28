@@ -84,7 +84,7 @@ wire    [4:0]   ch1_ram_addr_cntr, ch1_ram_addr_cpu;
 wire    [4:0]   ch1_ram_addr = ch1_ram_rdrq ? ch1_ram_addr_cpu : ch1_ram_addr_cntr;
 wire    [7:0]   ch1_ram_d, ch1_ram_q;
 
-IKASCC_player_memory_s #(.RAM_TYPE(RAM_TYPE), .INITFILE("D:/ASIC_RE/complete/Konami_051649/HDL/ch1ram.txt")) u_mem_ch1 (
+IKASCC_player_memory_s #(.RAM_TYPE(RAM_TYPE), .INITFILE()) u_mem_ch1 (
     .i_EMUCLK                   (emuclk                     ),
     .i_MCLK_PCEN_n              (mclkpcen_n                 ),
 
@@ -136,7 +136,7 @@ wire    [4:0]   ch2_ram_addr_cntr, ch2_ram_addr_cpu;
 wire    [4:0]   ch2_ram_addr = ch2_ram_rdrq ? ch2_ram_addr_cpu : ch2_ram_addr_cntr;
 wire    [7:0]   ch2_ram_d, ch2_ram_q;
 
-IKASCC_player_memory_s #(.RAM_TYPE(RAM_TYPE), .INITFILE("D:/ASIC_RE/complete/Konami_051649/HDL/ch2ram.txt")) u_mem_ch2 (
+IKASCC_player_memory_s #(.RAM_TYPE(RAM_TYPE), .INITFILE()) u_mem_ch2 (
     .i_EMUCLK                   (emuclk                     ),
     .i_MCLK_PCEN_n              (mclkpcen_n                 ),
 
@@ -188,7 +188,7 @@ wire    [4:0]   ch3_ram_addr_cntr, ch3_ram_addr_cpu;
 wire    [4:0]   ch3_ram_addr = ch3_ram_rdrq ? ch3_ram_addr_cpu : ch3_ram_addr_cntr;
 wire    [7:0]   ch3_ram_d, ch3_ram_q;
 
-IKASCC_player_memory_s #(.RAM_TYPE(RAM_TYPE), .INITFILE("D:/ASIC_RE/complete/Konami_051649/HDL/ch3ram.txt")) u_mem_ch3 (
+IKASCC_player_memory_s #(.RAM_TYPE(RAM_TYPE), .INITFILE()) u_mem_ch3 (
     .i_EMUCLK                   (emuclk                     ),
     .i_MCLK_PCEN_n              (mclkpcen_n                 ),
 
@@ -278,7 +278,7 @@ always @(posedge emuclk) if(!mclkpcen_n) begin
     if(ch5_wavelatch_tick_pcen) ch5_wavelatch <= ch45_ram_q;
 end
 
-IKASCC_player_memory_s #(.RAM_TYPE(RAM_TYPE), .INITFILE("D:/ASIC_RE/complete/Konami_051649/HDL/ch45ram.txt")) u_mem_ch45 (
+IKASCC_player_memory_s #(.RAM_TYPE(RAM_TYPE), .INITFILE()) u_mem_ch45 (
     .i_EMUCLK                   (emuclk                     ),
     .i_MCLK_PCEN_n              (mclkpcen_n                 ),
 
@@ -432,7 +432,7 @@ end
                                                          |-| <-- 40ns interval
     /WR         ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯|_______________|¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
 
-    ram_wrrq    _________________________________________|¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯|___________________________
+    ram_wrrq    ___________________________________________|¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯|_________________________
                                         RAMCTRL_ASYNC      ^ <------ RAM WRITE TIMING
                                         RAMCTRL_SYNC                       ^ <----- RAM WRITE TIMING
 
