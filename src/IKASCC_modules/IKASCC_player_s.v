@@ -637,7 +637,7 @@ always @(posedge emuclk) if(!mclkpcen_n) begin
         if(~cyccntr == 4'd7) accshft_en <= 1'b0;
     end
 
-    accshft_en_z <= accshft_en;
+    accshft_en_z <= mul_rst ? 1'b0 : accshft_en;
 end
 
 //accumulation and shift
