@@ -1,4 +1,6 @@
-module IKASCC_player_s #(
+module IKASCC_player #(
+    parameter FULLY_ASYNC = 0,
+    parameter DELAY_LENGTH = 1,
     parameter RAM_TYPE = 1,
     parameter FAST_CLOCK = 0,
     parameter RAMCTRL_ASYNC = 0 //depends on the TC22SC characteristics
@@ -25,18 +27,73 @@ module IKASCC_player_s #(
 ////
 
 wire            emuclk = i_EMUCLK;
-wire            mclkpcen_n = i_MCLK_PCEN_n;
+//Async playback runs on every SCC clock edge, as in the original model.
+wire            mclkpcen_n = FULLY_ASYNC ? 1'b0 : i_MCLK_PCEN_n;
 wire            rst_n = i_RST_n;
 
 
+
+///////////////////////////////////////////////////////////
+//////  Delay chain
+////
+
+//Delay the inverted /WR for RAM writes; CPU registers still use posedge /WR.
+wire            i_DELAYED_WR;
+generate
+if(FULLY_ASYNC == 1) begin : async_delay
+`ifdef IKASCC_ASYNC_VENDOR_ALTERA
+wire [DELAY_LENGTH:0] delay /* synthesis keep */; 
+(* altera_attribute = "-name GLOBAL_SIGNAL GLOBAL_CLOCK" *) wire delayed_wr = delay[DELAY_LENGTH];
+assign i_DELAYED_WR = delayed_wr;
+
+`elsif IKASCC_ASYNC_VENDOR_XILINX
+(* keep = "true" *) wire [DELAY_LENGTH:0] delay;
+(* CLOCK_BUFFER_TYPE = "BUFG" *) wire delayed_wr = delay[DELAY_LENGTH];
+assign i_DELAYED_WR = delayed_wr;
+
+`elsif IKASCC_ASYNC_VENDOR_LATTICE
+wire [DELAY_LENGTH:0] delay /* synthesis syn_keep=1 nomerge=""*/;
+assign i_DELAYED_WR = delay[DELAY_LENGTH]; //TODO: how to use global buffer manually??
+
+`elsif IKASCC_ASYNC_VENDOR_GOWIN
+wire [DELAY_LENGTH:0] delay /* synthesis syn_keep=1 */;
+
+BUFG u_bufg(i_DELAYED_WR, delay[DELAY_LENGTH]);
+`else
+wire [DELAY_LENGTH:0] delay;
+assign i_DELAYED_WR = delay[DELAY_LENGTH];
+`endif
+
+assign  delay[0] = ~i_WR_n;
+
+genvar d;
+for(d=0; d<DELAY_LENGTH; d=d+1) begin : delay_chain
+IKASCC_primitive_buf u_dlybuf(delay[d], delay[d+1]);
+end
+end
+else begin : sync_delay
+assign i_DELAYED_WR = 1'b0;
+end
+endgenerate
 
 ///////////////////////////////////////////////////////////
 //////  Test register
 ////
 
 reg     [7:0]   db_z;
-wire            test_wr = i_WRRQ & i_SCCREG_EN & (i_ABLO[7:5] == 3'b111);
+wire            reg_wrrq = FULLY_ASYNC ? ~i_CS_n : i_WRRQ;
+wire            test_wr = reg_wrrq & i_SCCREG_EN & (i_ABLO[7:5] == 3'b111);
 reg     [7:0]   test;
+generate
+if(FULLY_ASYNC == 1) begin : test_async
+always @(posedge i_WR_n or negedge rst_n) begin
+    if(!rst_n) test <= 8'h00;
+    else begin
+        if(test_wr) test <= i_DB;
+    end
+end
+end
+else begin : test_sync
 always @(posedge emuclk) begin
     if(!rst_n) test <= 8'h00;
     else begin if(!mclkpcen_n) begin
@@ -44,6 +101,8 @@ always @(posedge emuclk) begin
         if(test_wr) test <= db_z;
     end end
 end
+end
+endgenerate
 
 wire    [4:0]   fraccntr_ld_n;
 wire    [1:0]   ch45_ram_addrsel;
@@ -84,17 +143,19 @@ wire    [4:0]   ch1_ram_addr_cntr, ch1_ram_addr_cpu;
 wire    [4:0]   ch1_ram_addr = ch1_ram_rdrq ? ch1_ram_addr_cpu : ch1_ram_addr_cntr;
 wire    [7:0]   ch1_ram_d, ch1_ram_q;
 
-IKASCC_player_memory_s #(.RAM_TYPE(RAM_TYPE), .INITFILE()) u_mem_ch1 (
+IKASCC_player_memory #(.FULLY_ASYNC(FULLY_ASYNC), .RAM_TYPE(RAM_TYPE), .FAST_CLOCK(FAST_CLOCK), .INITFILE()) u_mem_ch1 (
     .i_EMUCLK                   (emuclk                     ),
     .i_MCLK_PCEN_n              (mclkpcen_n                 ),
 
+    .i_RAM_WR                   (i_DELAYED_WR               ),
     .i_RAM_WRRQ                 (ch1_ram_wrrq & ~test[6]    ),
     .i_RAM_ADDR                 (ch1_ram_addr               ),
     .i_RAM_D                    (ch1_ram_d                  ),
     .o_RAM_Q                    (ch1_ram_q                  )
 );
 
-IKASCC_player_control_s #(
+IKASCC_player_control #(
+    .FULLY_ASYNC                (FULLY_ASYNC                ),
     .RAMCTRL_ASYNC              (RAMCTRL_ASYNC              ), //depends on the TC22SC characteristics
     .ADDR_RAM_BASE              (8'h00                      ),
     .ADDR_FREQ_BASE             (8'h80                      ),
@@ -136,17 +197,19 @@ wire    [4:0]   ch2_ram_addr_cntr, ch2_ram_addr_cpu;
 wire    [4:0]   ch2_ram_addr = ch2_ram_rdrq ? ch2_ram_addr_cpu : ch2_ram_addr_cntr;
 wire    [7:0]   ch2_ram_d, ch2_ram_q;
 
-IKASCC_player_memory_s #(.RAM_TYPE(RAM_TYPE), .INITFILE()) u_mem_ch2 (
+IKASCC_player_memory #(.FULLY_ASYNC(FULLY_ASYNC), .RAM_TYPE(RAM_TYPE), .FAST_CLOCK(FAST_CLOCK), .INITFILE()) u_mem_ch2 (
     .i_EMUCLK                   (emuclk                     ),
     .i_MCLK_PCEN_n              (mclkpcen_n                 ),
 
+    .i_RAM_WR                   (i_DELAYED_WR               ),
     .i_RAM_WRRQ                 (ch2_ram_wrrq & ~test[6]    ),
     .i_RAM_ADDR                 (ch2_ram_addr               ),
     .i_RAM_D                    (ch2_ram_d                  ),
     .o_RAM_Q                    (ch2_ram_q                  )
 );
 
-IKASCC_player_control_s #(
+IKASCC_player_control #(
+    .FULLY_ASYNC                (FULLY_ASYNC                ),
     .RAMCTRL_ASYNC              (RAMCTRL_ASYNC              ), //depends on the TC22SC characteristics
     .ADDR_RAM_BASE              (8'h20                      ),
     .ADDR_FREQ_BASE             (8'h82                      ),
@@ -188,17 +251,19 @@ wire    [4:0]   ch3_ram_addr_cntr, ch3_ram_addr_cpu;
 wire    [4:0]   ch3_ram_addr = ch3_ram_rdrq ? ch3_ram_addr_cpu : ch3_ram_addr_cntr;
 wire    [7:0]   ch3_ram_d, ch3_ram_q;
 
-IKASCC_player_memory_s #(.RAM_TYPE(RAM_TYPE), .INITFILE()) u_mem_ch3 (
+IKASCC_player_memory #(.FULLY_ASYNC(FULLY_ASYNC), .RAM_TYPE(RAM_TYPE), .FAST_CLOCK(FAST_CLOCK), .INITFILE()) u_mem_ch3 (
     .i_EMUCLK                   (emuclk                     ),
     .i_MCLK_PCEN_n              (mclkpcen_n                 ),
 
+    .i_RAM_WR                   (i_DELAYED_WR               ),
     .i_RAM_WRRQ                 (ch3_ram_wrrq & ~test[6]    ),
     .i_RAM_ADDR                 (ch3_ram_addr               ),
     .i_RAM_D                    (ch3_ram_d                  ),
     .o_RAM_Q                    (ch3_ram_q                  )
 );
 
-IKASCC_player_control_s #(
+IKASCC_player_control #(
+    .FULLY_ASYNC                (FULLY_ASYNC                ),
     .RAMCTRL_ASYNC              (RAMCTRL_ASYNC              ), //depends on the TC22SC characteristics
     .ADDR_RAM_BASE              (8'h40                      ),
     .ADDR_FREQ_BASE             (8'h84                      ),
@@ -278,17 +343,19 @@ always @(posedge emuclk) if(!mclkpcen_n) begin
     if(ch5_wavelatch_tick_pcen) ch5_wavelatch <= ch45_ram_q;
 end
 
-IKASCC_player_memory_s #(.RAM_TYPE(RAM_TYPE), .INITFILE()) u_mem_ch45 (
+IKASCC_player_memory #(.FULLY_ASYNC(FULLY_ASYNC), .RAM_TYPE(RAM_TYPE), .FAST_CLOCK(FAST_CLOCK), .INITFILE()) u_mem_ch45 (
     .i_EMUCLK                   (emuclk                     ),
     .i_MCLK_PCEN_n              (mclkpcen_n                 ),
 
+    .i_RAM_WR                   (i_DELAYED_WR               ),
     .i_RAM_WRRQ                 (ch45_ram_wrrq & ~test[6] & ~test[7]),
     .i_RAM_ADDR                 (ch45_ram_addr               ),
     .i_RAM_D                    (ch45_ram_d                  ),
     .o_RAM_Q                    (ch45_ram_q                  )
 );
 
-IKASCC_player_control_s #(
+IKASCC_player_control #(
+    .FULLY_ASYNC                (FULLY_ASYNC                ),
     .RAMCTRL_ASYNC              (RAMCTRL_ASYNC              ), //depends on the TC22SC characteristics
     .ADDR_RAM_BASE              (8'h60                      ),
     .ADDR_FREQ_BASE             (8'h86                      ),
@@ -319,7 +386,8 @@ IKASCC_player_control_s #(
     .o_SOUND                    (ch4_sound                  )
 );
 
-IKASCC_player_control_s #(
+IKASCC_player_control #(
+    .FULLY_ASYNC                (FULLY_ASYNC                ),
     .RAMCTRL_ASYNC              (RAMCTRL_ASYNC              ), //depends on the TC22SC characteristics
     .ADDR_RAM_BASE              (8'h60                      ),
     .ADDR_FREQ_BASE             (8'h88                      ),
@@ -369,7 +437,8 @@ endmodule
 
 
 
-module IKASCC_player_control_s #(
+module IKASCC_player_control #(
+    parameter FULLY_ASYNC = 0,
     parameter RAMCTRL_ASYNC = 0, //depends on the TC22SC characteristics
     parameter ADDR_RAM_BASE  = 8'h00,
     parameter ADDR_FREQ_BASE = 8'h00,
@@ -404,7 +473,8 @@ module IKASCC_player_control_s #(
 ////
 
 wire            emuclk = i_EMUCLK;
-wire            mclkpcen_n = i_MCLK_PCEN_n;
+//Async playback runs on every SCC clock edge, as in the original model.
+wire            mclkpcen_n = FULLY_ASYNC ? 1'b0 : i_MCLK_PCEN_n;
 wire            rst_n = i_RST_n;
 
 
@@ -412,6 +482,9 @@ wire            rst_n = i_RST_n;
 ///////////////////////////////////////////////////////////
 //////  SCC wavetable CPU R/W
 ////
+
+wire            reg_wrrq = FULLY_ASYNC ? ~i_CS_n : i_WRRQ;
+wire    [7:0]   reg_data = FULLY_ASYNC ? i_DB : i_DB_Z;
 
 //delay addr/data
 reg     [7:0]   i_ABLO_Z, i_DB_Z;
@@ -444,11 +517,17 @@ end
 */
 
 generate
-if(RAMCTRL_ASYNC == 0) begin : ramctrl_sync
+if(FULLY_ASYNC == 1) begin : ramctrl_bus
+assign  addr_lo = i_ABLO;
+assign  data = i_DB;
+assign  o_RAM_RDRQ = i_SCCREG_EN & ~i_CS_n & (i_ABLO[7:5] == ADDR_RAM_BASE[7:5]);
+assign  o_RAM_WRRQ = o_RAM_RDRQ; //chip select for the delayed write clock
+end
+else if(RAMCTRL_ASYNC == 0) begin : ramctrl_sync
 assign  addr_lo = i_ABLO_Z;
 assign  data = i_DB_Z;
 wire            ram_rdrq = i_RDRQ & i_SCCREG_EN & (addr_lo[7:5] == ADDR_RAM_BASE[7:5]);
-wire            ram_wrrq = i_WRRQ & i_SCCREG_EN & (addr_lo[7:5] == ADDR_RAM_BASE[7:5]);
+wire            ram_wrrq = reg_wrrq & i_SCCREG_EN & (addr_lo[7:5] == ADDR_RAM_BASE[7:5]);
 assign  o_RAM_RDRQ = ram_rdrq;
 assign  o_RAM_WRRQ = ram_wrrq;
 
@@ -473,13 +552,27 @@ assign  o_RAM_D = data;
 //////  Frequency register
 ////
 
-wire    freq_lo_wr = i_WRRQ & i_SCCREG_EN & (i_ABLO[7:5] == ADDR_FREQ_BASE[7:5]) & (i_ABLO[3:0] ==  ADDR_FREQ_BASE[3:0]);
-wire    freq_hi_wr = i_WRRQ & i_SCCREG_EN & (i_ABLO[7:5] == ADDR_FREQ_BASE[7:5]) & (i_ABLO[3:0] == (ADDR_FREQ_BASE[3:0] + 4'h1));
+wire    freq_lo_wr = reg_wrrq & i_SCCREG_EN & (i_ABLO[7:5] == ADDR_FREQ_BASE[7:5]) & (i_ABLO[3:0] ==  ADDR_FREQ_BASE[3:0]);
+wire    freq_hi_wr = reg_wrrq & i_SCCREG_EN & (i_ABLO[7:5] == ADDR_FREQ_BASE[7:5]) & (i_ABLO[3:0] == (ADDR_FREQ_BASE[3:0] + 4'h1));
 reg     [11:0]  freq;
-always @(posedge emuclk) if(!mclkpcen_n) begin
-    if(freq_lo_wr) freq[7:0] <= i_DB_Z;
-    if(freq_hi_wr) freq[11:8] <= i_DB_Z[3:0];
+generate
+if(FULLY_ASYNC == 1) begin : freq_async
+always @(posedge i_WR_n or negedge rst_n) begin
+    //Only the original async frequency register has a reset.
+    if(!rst_n) freq <= 12'h000;
+    else begin
+        if(freq_lo_wr) freq[7:0] <= reg_data;
+        if(freq_hi_wr) freq[11:8] <= reg_data[3:0];
+    end
 end
+end
+else begin : freq_sync
+always @(posedge emuclk) if(!mclkpcen_n) begin
+    if(freq_lo_wr) freq[7:0] <= reg_data;
+    if(freq_hi_wr) freq[11:8] <= reg_data[3:0];
+end
+end
+endgenerate
 
 
 
@@ -502,7 +595,7 @@ wire            fraccntr_a_bo;
 IKASCC_primitive_dncntr #(.W(4)) u_fraccntr_a (
     .i_EMUCLK(emuclk), .i_MCLK_PCEN_n(mclkpcen_n),
     .i_SET(1'b0 | ~rst_n), .i_LD(fraccntr_ld), .i_CNT(1'b1),
-    .i_D(freq_lo_wr ? i_DB_Z[3:0] : freq[3:0]), .o_Q(fraccntr_a), .o_BO(fraccntr_a_bo)
+    .i_D(freq_lo_wr ? reg_data[3:0] : freq[3:0]), .o_Q(fraccntr_a), .o_BO(fraccntr_a_bo)
 );
 
 wire    [3:0]   fraccntr_b;
@@ -510,7 +603,7 @@ wire            fraccntr_b_bo;
 IKASCC_primitive_dncntr #(.W(4)) u_fraccntr_b (
     .i_EMUCLK(emuclk), .i_MCLK_PCEN_n(mclkpcen_n),
     .i_SET(1'b0 | ~rst_n), .i_LD(fraccntr_ld), .i_CNT(fraccntr_a_bo),
-    .i_D(freq_lo_wr ? i_DB_Z[7:4] : freq[7:4]), .o_Q(fraccntr_b), .o_BO(fraccntr_b_bo)
+    .i_D(freq_lo_wr ? reg_data[7:4] : freq[7:4]), .o_Q(fraccntr_b), .o_BO(fraccntr_b_bo)
 );
 
 wire            fraccntr_c_cnt = i_TEST[0] ? 1'b1 : fraccntr_a_bo & fraccntr_b_bo;
@@ -519,7 +612,7 @@ wire            fraccntr_c_bo;
 IKASCC_primitive_dncntr #(.W(4)) u_fraccntr_c (
     .i_EMUCLK(emuclk), .i_MCLK_PCEN_n(mclkpcen_n),
     .i_SET(1'b0 | ~rst_n), .i_LD(fraccntr_ld), .i_CNT(fraccntr_c_cnt),
-    .i_D(freq_hi_wr ? i_DB_Z[3:0] : freq[11:8]), .o_Q(fraccntr_c), .o_BO(fraccntr_c_bo)
+    .i_D(freq_hi_wr ? reg_data[3:0] : freq[11:8]), .o_Q(fraccntr_c), .o_BO(fraccntr_c_bo)
 );
 
 assign  intcntr_cnt = i_TEST[1] ? fraccntr_a_bo & fraccntr_b_bo : fraccntr_c_cnt & fraccntr_c_bo;
@@ -540,9 +633,10 @@ wire    [11:0]  fraccntr = {fraccntr_c, fraccntr_b, fraccntr_a};
 //////  Frequency dirty flag
 ////
 
+//Preserve the original mode-specific /CS qualification of the dirty flag.
 wire            freq_changed;
-assign  freq_changed = (~i_WR_n & i_SCCREG_EN & (i_ABLO[7:5] == ADDR_FREQ_BASE[7:5]) & (i_ABLO[3:0] ==  ADDR_FREQ_BASE[3:0])) |
-                       (~i_WR_n & i_SCCREG_EN & (i_ABLO[7:5] == ADDR_FREQ_BASE[7:5]) & (i_ABLO[3:0] == (ADDR_FREQ_BASE[3:0] + 4'h1)));
+assign  freq_changed = (~i_WR_n & (FULLY_ASYNC ? ~i_CS_n : 1'b1) & i_SCCREG_EN & (i_ABLO[7:5] == ADDR_FREQ_BASE[7:5]) & (i_ABLO[3:0] ==  ADDR_FREQ_BASE[3:0])) |
+                       (~i_WR_n & (FULLY_ASYNC ? ~i_CS_n : 1'b1) & i_SCCREG_EN & (i_ABLO[7:5] == ADDR_FREQ_BASE[7:5]) & (i_ABLO[3:0] == (ADDR_FREQ_BASE[3:0] + 4'h1)));
 
 reg             freq_changed_z;
 always @(posedge emuclk) if(!mclkpcen_n) freq_changed_z <= freq_changed;
@@ -556,14 +650,26 @@ assign  intcntr_set = i_TEST[5] & (freq_changed | freq_changed_z);
 //////  Mute
 ////
 
-wire            mute_wr = i_WRRQ & i_SCCREG_EN & (i_ABLO[7:5] == ADDR_MUTE[7:5]) & (i_ABLO[3:0] ==  ADDR_MUTE[3:0]);
+wire            mute_wr = reg_wrrq & i_SCCREG_EN & (i_ABLO[7:5] == ADDR_MUTE[7:5]) & (i_ABLO[3:0] ==  ADDR_MUTE[3:0]);
 reg             mute;
+generate
+if(FULLY_ASYNC == 1) begin : mute_async
+always @(posedge i_WR_n or negedge rst_n) begin
+    if(!rst_n) mute <= 1'b0;
+    else begin
+        if(mute_wr) mute <= reg_data[BIT_MUTE];
+    end
+end
+end
+else begin : mute_sync
 always @(posedge emuclk) begin
     if(!i_RST_n) mute <= 1'b0;
     else begin if(!mclkpcen_n) begin
-        if(mute_wr) mute <= i_DB_Z[BIT_MUTE];
+        if(mute_wr) mute <= reg_data[BIT_MUTE];
     end end
 end
+end
+endgenerate
 
 
 
@@ -576,20 +682,39 @@ wire            mul_rst = fraccntr_ld;
 wire            mul_rst_pcen = intcntr_cnt | freq_lo_wr | freq_hi_wr; //positive edge enable of originally asynchronous mul_rst
 
 //volume register
-wire    vol_wr = i_WRRQ & i_SCCREG_EN & (i_ABLO[7:5] == ADDR_VOL[7:5]) & (i_ABLO[3:0] ==  ADDR_VOL[3:0]);
+wire    vol_wr = reg_wrrq & i_SCCREG_EN & (i_ABLO[7:5] == ADDR_VOL[7:5]) & (i_ABLO[3:0] ==  ADDR_VOL[3:0]);
 reg     [3:0]  vol;
-always @(posedge emuclk) if(!mclkpcen_n) begin
-    if(vol_wr) vol <= i_DB_Z[3:0];
+generate
+if(FULLY_ASYNC == 1) begin : vol_async
+always @(posedge i_WR_n) if(vol_wr) vol <= reg_data[3:0];
 end
+else begin : vol_sync
+always @(posedge emuclk) if(!mclkpcen_n) begin
+    if(vol_wr) vol <= reg_data[3:0];
+end
+end
+endgenerate
 
 //current volume register
 reg     [3:0]  curr_vol;
+generate
+if(FULLY_ASYNC == 1) begin : curr_vol_async
+always @(posedge emuclk or negedge rst_n) begin
+    if(!rst_n) curr_vol <= 4'd0;
+    else begin
+        if(mul_rst_pcen) curr_vol <= vol;
+    end
+end
+end
+else begin : curr_vol_sync
 always @(posedge emuclk) begin
     if(!i_RST_n) curr_vol <=  4'd0;
     else begin if(!mclkpcen_n) begin
         if(mul_rst_pcen) curr_vol <= vol;
     end end
 end
+end
+endgenerate
 
 /*
 do not use this expression
@@ -637,6 +762,7 @@ always @(posedge emuclk) if(!mclkpcen_n) begin
         if(~cyccntr == 4'd7) accshft_en <= 1'b0;
     end
 
+    //Restart must discard the delayed enable of the previous multiplication.
     accshft_en_z <= mul_rst ? 1'b0 : accshft_en;
 end
 
@@ -657,7 +783,7 @@ always @(posedge emuclk) if(!mclkpcen_n) begin
     end
 
     //asynchronous outlatch/mute emulation
-    if(mute_wr && ~i_DB_Z[BIT_MUTE]) final_sound <= 8'h00;
+    if(mute_wr && ~reg_data[BIT_MUTE]) final_sound <= 8'h00;
     else if(!mute) final_sound <= 8'h0;
     else begin
         if(accshft_en_z && (~cyccntr == 4'd8)) final_sound <= accshft_next;
@@ -667,9 +793,10 @@ end
 endmodule
 
 
-module IKASCC_player_memory_s #(parameter RAM_TYPE = 1, parameter FAST_CLOCK = 0, parameter INITFILE = "") (
+module IKASCC_player_memory #(parameter FULLY_ASYNC = 0, parameter RAM_TYPE = 1, parameter FAST_CLOCK = 0, parameter INITFILE = "") (
     input   wire            i_EMUCLK,
     input   wire            i_MCLK_PCEN_n,
+    input   wire            i_RAM_WR, //delayed write clock in async mode
     input   wire            i_RAM_WRRQ,
     input   wire    [4:0]   i_RAM_ADDR,
     input   wire    [7:0]   i_RAM_D,
@@ -682,7 +809,7 @@ module IKASCC_player_memory_s #(parameter RAM_TYPE = 1, parameter FAST_CLOCK = 0
 ////
 
 wire            emuclk = i_EMUCLK;
-wire            mclkpcen_n = i_MCLK_PCEN_n;
+wire            mclkpcen_n = FULLY_ASYNC ? 1'b0 : i_MCLK_PCEN_n;
 
 
 
@@ -695,7 +822,12 @@ reg     [7:0]   wavetable_ram[0:31];
 initial if(INITFILE != "") $readmemh(INITFILE, wavetable_ram);
 
 generate
-if(RAM_TYPE == 0) begin : ramstyle_distributed
+if(FULLY_ASYNC == 1) begin : ramstyle_async
+//CPU data occupies the RAM bus even when this bank is not selected.
+assign  o_RAM_Q = i_RAM_WR ? i_RAM_D : wavetable_ram[i_RAM_ADDR];
+always @(posedge i_RAM_WR) if(i_RAM_WRRQ) wavetable_ram[i_RAM_ADDR] <= i_RAM_D;
+end
+else if(RAM_TYPE == 0) begin : ramstyle_distributed
 assign  o_RAM_Q = i_RAM_WRRQ ? i_RAM_D : wavetable_ram[i_RAM_ADDR];
 
 always @(posedge emuclk) begin
@@ -724,7 +856,6 @@ assign  o_RAM_Q = i_RAM_WRRQ ? wavedata_cpu : wavedata_ram;
         if(i_RAM_WRRQ) wavedata_cpu <= i_RAM_D;
     end
     end
-
 end
 endgenerate
 

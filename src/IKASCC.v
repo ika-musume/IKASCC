@@ -52,11 +52,7 @@ localparam  FULLY_ASYNC = (IMPL_TYPE == 2) ? 1 : 0;
 localparam  RAM_TYPE    = (IMPL_TYPE == 2) ? 0 : RAM_BLOCK;
 localparam  FAST_CLOCK  = (IMPL_TYPE == 0) ? 1 : 0;
 
-`define IKASCC_SIMULATION
-//`define IKASCC_ASYNC_VENDOR_ALTERA
-//`define IKASCC_ASYNC_VENDOR_XILINX
-//`define IKASCC_ASYNC_VENDOR_LATTICE
-//`define IKASCC_ASYNC_VENDOR_GOWIN
+//Select simulation delay or vendor attributes with compiler defines.
 
 
 
@@ -75,6 +71,8 @@ wire            sccreg_en; //common wire
 ///////////////////////////////////////////////////////////
 //////  SCC Modules
 ////
+
+wire            read_request, write_request;
 
 generate
 if(FULLY_ASYNC == 0) begin : IKASCC_SYNC_MODE
@@ -112,7 +110,6 @@ if(FULLY_ASYNC == 0) begin : IKASCC_SYNC_MODE
 
 
 //declare synchronized signals: every module must use these things!
-wire            read_request, write_request;
 
 reg     [1:0]   rd_syncchain, wr_syncchain;
 always @(posedge emuclk) if(!mclkpcen_n) begin
@@ -129,11 +126,18 @@ assign  write_request = wr_syncchain == 2'b10;
 
 
 
+end
+else begin : IKASCC_ASYNC_MODE
+assign  read_request = 1'b0;
+assign  write_request = 1'b0;
+end
+endgenerate
+
 ///////////////////////////////////////////////////////////
-//////  Virtual ROM Controller(synchronous)
+//////  Virtual ROM Controller
 ////
 
-IKASCC_vrc_s #(.RAMCTRL_ASYNC(RAMCTRL_ASYNC)) u_vrc_s_main (
+IKASCC_vrc #(.FULLY_ASYNC(FULLY_ASYNC), .RAMCTRL_ASYNC(RAMCTRL_ASYNC)) u_vrc_main (
     .i_EMUCLK                   (emuclk                     ),
     .i_MCLK_PCEN_n              (mclkpcen_n                 ),
     .i_RST_n                    (rst_n                      ),
@@ -144,6 +148,7 @@ IKASCC_vrc_s #(.RAMCTRL_ASYNC(RAMCTRL_ASYNC)) u_vrc_s_main (
     .o_ROMCS_n                  (o_ROMCS_n                  ),
     .o_ROMADDR                  (o_ROMADDR                  ),
 
+    .i_WR_n                     (i_WR_n                     ),
     .i_WRRQ                     (write_request              ),
     .i_DB                       (i_DB                       ),
     .i_ABHI                     (i_ABHI                     ),
@@ -155,10 +160,10 @@ IKASCC_vrc_s #(.RAMCTRL_ASYNC(RAMCTRL_ASYNC)) u_vrc_s_main (
 
 
 ///////////////////////////////////////////////////////////
-//////  Wavetable player(synchronous)
+//////  Wavetable player
 ////
 
-IKASCC_player_s #(.RAM_TYPE(RAM_TYPE), .FAST_CLOCK(FAST_CLOCK), .RAMCTRL_ASYNC(RAMCTRL_ASYNC)) u_player_main (
+IKASCC_player #(.FULLY_ASYNC(FULLY_ASYNC), .DELAY_LENGTH(RAM_ASYNC_WRITE_DELAY_CHAIN_LENGTH), .RAM_TYPE(RAM_TYPE), .FAST_CLOCK(FAST_CLOCK), .RAMCTRL_ASYNC(RAMCTRL_ASYNC)) u_player_main (
     .i_EMUCLK                   (emuclk                     ),
     .i_MCLK_PCEN_n              (mclkpcen_n                 ),
     .i_RST_n                    (rst_n                      ),
@@ -177,56 +182,6 @@ IKASCC_player_s #(.RAM_TYPE(RAM_TYPE), .FAST_CLOCK(FAST_CLOCK), .RAMCTRL_ASYNC(R
 
     .o_SOUND                    (o_SOUND                    )
 );
-
-end
-else begin : IKASCC_ASYNC_MODE
-
-///////////////////////////////////////////////////////////
-//////  Virtual ROM Controller(asynchronous)
-////
-
-IKASCC_vrc_a u_vrc_a_main (
-    .i_RST_n                    (rst_n                      ),
-
-    .i_WR_n                     (i_WR_n                     ),
-    .i_CS_n                     (i_CS_n                     ),
-    .i_RD_n                     (i_RD_n                     ),
-
-    .o_ROMCS_n                  (o_ROMCS_n                  ),
-    .o_ROMADDR                  (o_ROMADDR                  ),
-
-    .i_DB                       (i_DB                       ),
-    .i_ABHI                     (i_ABHI                     ),
-    .i_ABLO                     (i_ABLO                     ),
-
-    .o_SCCREG_EN                (sccreg_en                  )
-);
-
-
-
-///////////////////////////////////////////////////////////
-//////  Wavetable player(asynchronous)
-////
-
-IKASCC_player_a #(.DELAY_LENGTH(RAM_ASYNC_WRITE_DELAY_CHAIN_LENGTH)) u_player_main2 (
-    .i_EMUCLK                   (emuclk                     ),
-    .i_RST_n                    (rst_n                      ),
-
-    .i_SCCREG_EN                (sccreg_en                  ),
-    .i_CS_n                     (i_CS_n                     ),
-    .i_RD_n                     (i_RD_n                     ),
-    .i_WR_n                     (i_WR_n                     ),
-    .i_ABLO                     (i_ABLO                     ),
-    .i_DB                       (i_DB                       ),
-    .o_DB                       (o_DB                       ),
-
-    .o_TEST                     (o_TEST                     ),
-
-    .o_SOUND                    (o_SOUND                    )
-);
-
-end
-endgenerate
 
 //data output enable
 assign  o_DB_OE = (sccreg_en & ~i_CS_n & ~i_RD_n & ~i_ABLO[7]);

@@ -3,7 +3,7 @@ Konami SCC core for FPGA implementation. Based on schematics extracted from a di
 
 ## Features
 * A **cycle-accurate, die shot based, BSD2 licensed** core.
-* Four implementation options available.
+* Three bus implementation modes, with BRAM or DFF-based wavetable storage for the synchronous modes.
 
 ## Module instantiation
 The steps below show how to instantiate the IKASCC module in Verilog:
@@ -47,14 +47,14 @@ IKASCC #(.IMPL_TYPE(1), .RAM_BLOCK(1)) main (
 * `RAM_BLOCK` If **1**, the core will use BRAMs. If **0**, the core will use DFFs. If `IMPL_TYPE` is **2**, it will use DFFs always.
 
 **INTERNAL PARAMETERS**
-* `RAMCTRL_ASYNC` Valid for the `IMPL_TYPE` **0** or **1**. This is important when emulating the characteristics of the original chip. An SCC wavetable player samples data from an embedded RAM on the rising edge of the clock. When the CPU writes data to the embedded RAM, and the DFF picks up the data provided by the CPU. This is a reported glitch of the chip. I made these parameters because I'm not sure about global buffer delay, gate delay and access time of the embedded RAM of TC22SC standard cell ASIC. Moreover, I haven't compared the behavior of the core with the actual chip. It can have a value of **0** or **1**, and there is a detailed description in the file `IKASCC_player_s.v`. You should adjust the timing manually if you want to use the `IMPL_TYPE` **2**.
+* `RAMCTRL_ASYNC` Valid for the `IMPL_TYPE` **0** or **1**. This is important when emulating the characteristics of the original chip. An SCC wavetable player samples data from an embedded RAM on the rising edge of the clock. When the CPU writes data to the embedded RAM, and the DFF picks up the data provided by the CPU. This is a reported glitch of the chip. I made these parameters because I'm not sure about global buffer delay, gate delay and access time of the embedded RAM of TC22SC standard cell ASIC. Moreover, I haven't compared the behavior of the core with the actual chip. It can have a value of **0** or **1**, and there is a detailed description in the file `IKASCC_player.v`. You should adjust the timing manually if you want to use the `IMPL_TYPE` **2**.
 * `RAM_ASYNC_WRITE_DELAY_CHAIN_LENGTH` defines the delay chain length. Values can be very different depending on the FPGA.
 
 
 **PORTS**
 * `i_EMUCLK` is your system clock.
 * `i_MCLK_PCEN_n` is the clock enable(negative logic) for rising edge of the MCLK. If you want to use a 3.58 MHz clock, you can supply 3.58 MHz to `i_EMUCLK` and connect this port to logic 0.
-* `i_RST_n` is the synchronous reset on the `IMPL_TYPE` **0** or **1**, asynchronous reset on the the `IMPL_TYPE` **2**.
+* `i_RST_n` retains the original mode-specific reset behavior: synchronous in modes **0** and **1**; asynchronous for CPU-written resettable registers and the current-volume register in mode **2**. Playback counters and the sound summer still reset on their original clock events.
 * `o_DB_OE` is the output enable for FPGA's tri-state I/O driver.
 * `o_SOUND` is the sound output. You can sample the sound on the rising edge of MCLK.
 
